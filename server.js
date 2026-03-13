@@ -138,7 +138,11 @@ app.get('/proxy/live/:stream_id', async (req, res) => {
   }
 });
 
-// ── Démarrage ───────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🎬 IPTV Player démarré → http://localhost:${PORT}\n`);
-});
+// ── Démarrage (local uniquement — Vercel gère lui-même l'écoute) ────────────
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n🎬 IPTV Player démarré → http://localhost:${PORT}\n`);
+  });
+}
+
+module.exports = app;
