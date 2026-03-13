@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamPlayer — IPTV</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══════════════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════════════ -->
+  <aside id="sidebar">
+
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+      </svg>
+      <span>StreamPlayer</span>
+    </div>
+
+    <!-- Navigation principale -->
+    <nav>
+      <button class="nav-btn active" data-section="live" onclick="switchSection('live', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 7.76a6 6 0 0 0 0 8.49M20.49 4.49a12 12 0 0 1 0 15.02M3.51 4.49a12 12 0 0 0 0 15.02"/>
+        </svg>
+        Live TV
+        <span id="live-count" class="badge hidden"></span>
+      </button>
+      <button class="nav-btn" data-section="vod" onclick="switchSection('vod', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="m15 10-4 4 6 6M3 18v-6a9 9 0 0 1 18 0v6"/>
+        </svg>
+        Films
+        <span id="vod-count" class="badge hidden"></span>
+      </button>
+      <button class="nav-btn" data-section="series" onclick="switchSection('series', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="7" width="20" height="15" rx="2"/>
+          <path d="M16 3H8M12 3v4M9 12l3 2 3-2"/>
+        </svg>
+        Séries
+        <span id="series-count" class="badge hidden"></span>
+      </button>
+    </nav>
+
+    <!-- Catégories -->
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Catégories</h3>
+      <div id="categories-list">
+        <button class="cat-btn active" data-id="all" onclick="selectCategory('all', this)">
+          Toutes
+        </button>
+      </div>
+    </div>
+
+    <!-- Infos compte -->
+    <div id="account-info" class="account-info">
+      <div class="account-loading">Chargement…</div>
+    </div>
+
+  </aside>
+
+  <!-- ══════════════════════════════════════════
+       CONTENU PRINCIPAL
+  ══════════════════════════════════════════ -->
+  <div id="main-wrapper">
+
+    <header>
+      <div class="header-left">
+        <h1 id="section-title">Live TV</h1>
+        <span id="items-count" class="items-count"></span>
+      </div>
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input id="search-input" type="text" placeholder="Rechercher…" oninput="filterContent()" />
+        <button id="search-clear" class="search-clear hidden" onclick="clearSearch()">✕</button>
+      </div>
+    </header>
+
+    <main id="content-area">
+      <div id="loader" class="loader">
+        <div class="spinner"></div>
+        <p>Chargement des chaînes…</p>
+      </div>
+      <div id="grid" class="grid"></div>
+      <div id="empty-state" class="empty-state hidden">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>
+        </svg>
+        <p>Aucun résultat trouvé</p>
+      </div>
+    </main>
+
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL LECTEUR
+══════════════════════════════════════════ -->
+<div id="player-modal" class="player-modal hidden" onclick="onModalBackdropClick(event)">
+  <div class="player-box" id="player-box">
+
+    <!-- En-tête joueur -->
+    <div class="player-topbar">
+      <div class="player-channel-meta">
+        <img id="pl-logo" src="" alt="" />
+        <div class="player-channel-text">
+          <h2 id="pl-name">Chaîne</h2>
+          <p id="pl-program">—</p>
+        </div>
+      </div>
+      <div class="player-controls-top">
+        <button class="icon-btn" title="Plein écran" onclick="toggleFullscreen()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>
+          </svg>
+        </button>
+        <button class="icon-btn close-btn" title="Fermer" onclick="closePlayer()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Vidéo -->
+    <div class="video-wrap" id="video-wrap">
+      <video id="video" controls autoplay playsinline></video>
+      <div id="video-error" class="video-error hidden">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+        </svg>
+        <p>Impossible de lire ce flux</p>
+        <button onclick="retryStream()">Réessayer</button>
+      </div>
+    </div>
+
+    <!-- EPG -->
+    <div class="epg-bar" id="epg-bar">
+      <span class="epg-label">Programme</span>
+      <div id="epg-scroll" class="epg-scroll"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
