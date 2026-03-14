@@ -203,14 +203,14 @@ function rewriteManifest(content, baseUrl) {
 app.get('/proxy/stream/:stream_id', async (req, res) => {
   try {
     const targetUrl = `${BASE}/live/${USER}/${PASS}/${req.params.stream_id}.m3u8`;
-    const { data: stream, headers } = await fetchRaw(targetUrl, true);
+    const { stream, headers } = await fetchStream(targetUrl);
 
     res.set('Content-Type', headers['content-type'] || 'video/mp2t');
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Cache-Control', 'no-cache');
 
     stream.pipe(res);
-    req.on('close', () => stream.destroy()); // couper le flux si le client part
+    req.on('close', () => stream.destroy());
   } catch (e) {
     if (!res.headersSent) res.status(502).json({ error: e.message });
   }
