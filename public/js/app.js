@@ -1,10 +1,11 @@
 /* ══════════════════════════════════════════════════════════
    État global
 ══════════════════════════════════════════════════════════ */
-let allItems       = [];      // chaînes / films / séries chargés
-let currentSection = 'live';  // 'live' | 'vod' | 'series'
-let currentChannel = null;    // objet du flux en cours de lecture
-let hlsInstance    = null;    // instance hls.js
+let allItems        = [];      // chaînes / films / séries chargés
+let currentSection  = 'live'; // 'live' | 'vod' | 'series'
+let currentChannel  = null;   // objet du flux en cours de lecture
+let hlsInstance     = null;   // instance hls.js
+let mpegtsInstance  = null;   // instance mpegts.js
 
 /* ══════════════════════════════════════════════════════════
    Démarrage
@@ -160,8 +161,9 @@ function makeCard(item) {
   card.className = 'card';
 
   const logoUrl = item.stream_icon || item.cover || '';
-  const logoHtml = logoUrl
-    ? `<img class="card-logo" src="${logoUrl}" alt="" loading="lazy" onerror="this.replaceWith(makePlaceholder())">`
+  const proxied = logoUrl ? `/proxy/img?url=${encodeURIComponent(logoUrl)}` : '';
+  const logoHtml = proxied
+    ? `<img class="card-logo" src="${proxied}" alt="" loading="lazy" onerror="this.replaceWith(makePlaceholder())">`
     : makePlaceholder().outerHTML;
 
   const badge = currentSection === 'live'
@@ -222,7 +224,7 @@ async function startPlayback(item) {
   const logo = document.getElementById('pl-logo');
   const logoSrc = item.stream_icon || item.cover || '';
   if (logoSrc) {
-    logo.src = logoSrc;
+    logo.src = `/proxy/img?url=${encodeURIComponent(logoSrc)}`;
     logo.style.display = 'block';
     logo.onerror = () => { logo.style.display = 'none'; };
   } else {
@@ -267,40 +269,51 @@ async function startPlayback(item) {
   }
 }
 
+function destroyPlayers() {
+  if (hlsInstance)    { hlsInstance.destroy();    hlsInstance    = null; }
+  if (mpegtsInstance) { mpegtsInstance.destroy(); mpegtsInstance = null; }
+}
+
 function loadStream(url, type) {
   const video = document.getElementById('video');
-
-  // Détruire l'instance HLS précédente
-  if (hlsInstance) {
-    hlsInstance.destroy();
-    hlsInstance = null;
-  }
+  destroyPlayers();
   video.src = '';
 
-  if (type === 'hls' && Hls.isSupported()) {
-    hlsInstance = new Hls({
-      enableWorker: true,
-      lowLatencyMode: true,
-      backBufferLength: 30,
-    });
+  if (type === 'mpegts' && typeof mpegts !== 'undefined' && mpegts.getFeatureList().mseLivePlayback) {
+    // Flux MPEG-TS brut (Live TV via proxy)
+    mpegtsInstance = mpegts.createPlayer(
+      { type: 'mpegts', url, isLive: true },
+      {
+        enableWorker: true,
+        liveBufferLatencyChasing: true,
+        liveSync: true,
+        stashInitialSize: 128,
+      }
+    );
+    mpegtsInstance.attachMediaElement(video);
+    mpegtsInstance.load();
+    mpegtsInstance.play().catch(() => {});
+    mpegtsInstance.on(mpegts.Events.ERROR, () => showVideoError());
+
+  } else if (type === 'hls' && Hls.isSupported()) {
+    // Flux HLS (fallback ou VOD)
+    hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
     hlsInstance.loadSource(url);
     hlsInstance.attachMedia(video);
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
     hlsInstance.on(Hls.Events.ERROR, (_, data) => {
       if (data.fatal) {
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          hlsInstance.startLoad();
-        } else {
-          showVideoError();
-        }
+        data.type === Hls.ErrorTypes.NETWORK_ERROR ? hlsInstance.startLoad() : showVideoError();
       }
     });
+
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
     // Safari — HLS natif
     video.src = url;
     video.play().catch(() => {});
+
   } else {
-    // VOD ou flux direct
+    // VOD direct
     video.src = url;
     video.play().catch(() => {});
   }
@@ -368,10 +381,7 @@ function closePlayer() {
   video.pause();
   video.src = '';
 
-  if (hlsInstance) {
-    hlsInstance.destroy();
-    hlsInstance = null;
-  }
+  destroyPlayers();
 
   document.getElementById('player-modal').classList.add('hidden');
   document.getElementById('video').style.display = 'block';
