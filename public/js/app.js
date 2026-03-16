@@ -243,7 +243,7 @@ async function startPlayback(item) {
     if (currentSection === 'live') {
       const r = await api(`/api/stream-url/${item.stream_id}`);
       streamUrl  = r.url;
-      streamType = 'hls';
+      streamType = r.type;
     } else {
       const ext = item.container_extension || 'mp4';
       const r   = await api(`/api/vod-url/${item.stream_id}?ext=${ext}`);
@@ -303,7 +303,18 @@ function loadStream(url, type) {
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
     hlsInstance.on(Hls.Events.ERROR, (_, data) => {
       if (data.fatal) {
-        data.type === Hls.ErrorTypes.NETWORK_ERROR ? hlsInstance.startLoad() : showVideoError();
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          hlsInstance.startLoad();
+        } else if (
+          data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+          data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR
+        ) {
+          // Le CDN a retourné du TS brut — fallback mpegts.js
+          destroyPlayers();
+          loadStream(url, 'mpegts');
+        } else {
+          showVideoError();
+        }
       }
     });
 

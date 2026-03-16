@@ -112,10 +112,9 @@ app.get('/api/series', async (req, res) => {
   }
 });
 
-// ── URL de flux Live → proxy interne (résout mixed-content HTTPS/HTTP) ──────
+// ── URL de flux Live → proxy HLS avec réécriture d'URLs ─────────────────────
 app.get('/api/stream-url/:stream_id', (req, res) => {
-  // Proxy de flux brut : suit les redirections et pipe le MPEG-TS
-  res.json({ url: `/proxy/stream/${req.params.stream_id}`, type: 'mpegts' });
+  res.json({ url: `/proxy/hls/${req.params.stream_id}/playlist.m3u8`, type: 'hls' });
 });
 
 // ── URL de flux VOD ─────────────────────────────────────────────────────────
