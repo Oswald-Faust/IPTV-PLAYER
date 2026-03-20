@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "diagnose:xtream": "node scripts/diagnose-xtream.js"
+    "diagnose:xtream": "node scripts/diagnose-xtream.js",
+    "home:online": "bash scripts/home-online.sh",
+    "home:install-agent": "bash scripts/install-macos-launchagent.sh"
   },
   "dependencies": {
     "axios": "^1.6.7",
