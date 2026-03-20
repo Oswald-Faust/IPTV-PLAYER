@@ -3,6 +3,13 @@ const express = require('express');
 const axios   = require('axios');
 const https   = require('https');
 const path    = require('path');
+const crypto  = require('crypto');
+
+const {
+  buildXtreamHeaders,
+  serializeAxiosError,
+  xtreamRequest,
+} = require('./lib/xtream');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -10,6 +17,7 @@ const PORT = process.env.PORT || 3000;
 const BASE = process.env.IPTV_URL  || 'http://samlg.top';
 const USER = process.env.IPTV_USER || 'testtest1';
 const PASS = process.env.IPTV_PASS || 'LTRZm6SJSJDRYB';
+const HEADERS = buildXtreamHeaders();
 
 // Agent HTTPS sans vérification de certificat (pour logos avec certs invalides)
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -17,22 +25,47 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 // ── Fichiers statiques ──────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ── Helper API Xtream Codes ─────────────────────────────────────────────────
-const HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'application/json, text/plain, */*',
-};
-
 async function xtream(action, extra = {}) {
-  const params = new URLSearchParams({ username: USER, password: PASS, ...extra });
-  if (action) params.set('action', action);
-  const url = `${BASE}/player_api.php?${params.toString()}`;
-  const { data } = await axios.get(url, {
-    timeout: 20000,
+  const { data } = await xtreamRequest({
+    baseUrl: BASE,
+    username: USER,
+    password: PASS,
+    action,
+    extra,
     headers: HEADERS,
-    maxRedirects: 5,
   });
   return data;
+}
+
+function isUpstreamError(error) {
+  return !!(error.response || error.request);
+}
+
+function logXtreamError(route, requestId, error) {
+  const detail = serializeAxiosError(error);
+  console.error(JSON.stringify({
+    ts: new Date().toISOString(),
+    requestId,
+    route,
+    detail,
+  }));
+}
+
+function handleXtreamError(route, res, error) {
+  const requestId = crypto.randomUUID();
+  const detail = serializeAxiosError(error);
+  const statusCode = isUpstreamError(error) ? 502 : 500;
+
+  logXtreamError(route, requestId, error);
+
+  res.status(statusCode).json({
+    error: isUpstreamError(error) ? 'upstream_xtream_error' : 'internal_error',
+    message: error.message,
+    request_id: requestId,
+    upstream_status: detail.status,
+    upstream_server: detail.server,
+    upstream_body_preview: detail.responseBodyPreview || '',
+  });
 }
 
 // ── Infos du compte ─────────────────────────────────────────────────────────
@@ -40,7 +73,7 @@ app.get('/api/info', async (req, res) => {
   try {
     res.json(await xtream(''));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    handleXtreamError(req.path, res, e);
   }
 });
 
@@ -49,7 +82,7 @@ app.get('/api/categories', async (req, res) => {
   try {
     res.json(await xtream('get_live_categories'));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    handleXtreamError(req.path, res, e);
   }
 });
 
@@ -59,7 +92,7 @@ app.get('/api/channels', async (req, res) => {
     const extra = req.query.category_id ? { category_id: req.query.category_id } : {};
     res.json(await xtream('get_live_streams', extra));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    handleXtreamError(req.path, res, e);
   }
 });
 
@@ -70,7 +103,7 @@ app.get('/api/epg', async (req, res) => {
     if (!stream_id) return res.status(400).json({ error: 'stream_id requis' });
     res.json(await xtream('get_short_epg', { stream_id, limit }));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    handleXtreamError(req.path, res, e);
   }
 });
 
@@ -79,7 +112,7 @@ app.get('/api/vod/categories', async (req, res) => {
   try {
     res.json(await xtream('get_vod_categories'));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    handleXtreamError(req.path, res, e);
   }
 });
 
@@ -89,7 +122,7 @@ app.get('/api/vod', async (req, res) => {
     const extra = req.query.category_id ? { category_id: req.query.category_id } : {};
     res.json(await xtream('get_vod_streams', extra));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    handleXtreamError(req.path, res, e);
   }
 });
 
@@ -98,7 +131,7 @@ app.get('/api/series/categories', async (req, res) => {
   try {
     res.json(await xtream('get_series_categories'));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    handleXtreamError(req.path, res, e);
   }
 });
 
@@ -108,7 +141,7 @@ app.get('/api/series', async (req, res) => {
     const extra = req.query.category_id ? { category_id: req.query.category_id } : {};
     res.json(await xtream('get_series', extra));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    handleXtreamError(req.path, res, e);
   }
 });
 
